@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@300&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+        }
+
+        .small-title-bar {
+            position: absolute;
+            left: 1%;
+            top: 0.5%;
+            /* Closer to the top */
+            font-size: 0.75em;
+            /* Reduced size */
+            font-weight: 300;
+            font-family: 'Lato', sans-serif;
+            color: #808080;
+            /* Gray color */
+        }
+
+        .title-bar {
+            position: absolute;
+            left: 10%;
+            top: 6%;
+            font-size: 1.5em;
+            /* Adjusted size */
+            font-weight: 300;
+            font-family: 'Lato', sans-serif;
+            color: #3B6978;
+            /* Muted blue color */
+        }
+
+        .container {
+            width: 65%;
+            height: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .app-content {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        .app-content textarea {
+            width: 100%;
+            height: 100%;
+            resize: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="small-title-bar">
+        <h1>What's Wrong With My TLE</h1>
+    </div>
+    <div class="title-bar">
+        <h1>TLE Validator 🛰️</h1>
+    </div>
+    <div class="container">
+        <div class="app-content">
+            <textarea id="userinput" rows="6" oninput="display()">
+1 25544U 98067A   21188.16923446  .00000142  00000-0  10785-4 0  9997
+2 25544  51.6438 243.9087 0002016 141.2430 315.7704 15.48767552291690
+            </textarea>
+        </div>
+    </div>
+
+    <script>
+        class TLEValidator {
+            constructor() {
+                this.lineOneCatalogNumber = '';
+
+                this.lineOneRegexCatalogNumber = /[0-Z]{5}[CSU]/;
+                this.lineOneRegexInternationalDesignator = / (\d{5}[A-Z][ A-Z]{2}|\d{5}[ A-Z]{2}[A-Z]| {8})/;
+                this.lineOneRegexEpoch = / \d{5}\.\d{8}/;
+                this.lineOneRegexDMeanMotion = / [ \-+]\.\d{8}/;
+                this.lineOneRegexDDMeanMotion = / [ \-+]\d{5}[\-+]\d/;
+                this.lineOneRegexBSTAR = / [ \-+]\d{5}[\-+]\d/;
+                this.lineOneRegexEphemType = / [0-5]/;
+                this.lineOneRegexSetNumber = / [ \d]{3}\d/;
+
+                this.lineTwoCatalogNumber = '';
+
+                this.lineTwoRegexCatalogNumber = /[0-Z]{5}/;
+                this.lineTwoRegexInclination = / [ \d]{3}\.\d{4}/;
+                this.lineTwoRegexRAAN = / [ \d]{3}\.\d{4}/;
+                this.lineTwoRegexEccentricity = / \d{7}/;
+                this.lineTwoRegexArgumentOfPerigee = / [ \d]{3}\.\d{4}/;
+                this.lineTwoRegexMeanAnomaly = / [ \d]{3}\.\d{4}/;
+                this.lineTwoRegexMeanMotion = / [ \d]{2}\.\d{8}/;
+                this.lineTwoRegexRevNumber = /[ \d]{4}\d/;
+            }
+
+            computeChecksum(line) {
+                let sum = 0;
+                for (let i = 0; i < 68; i += 1) {
+                    const char = line[i];
+                    const val = parseInt(char);
+                    if (!isNaN(val)) {
+                        sum += val;
+                    } else if (char == '-') {
+                        sum += 1;
+                    }
+                }
+                return sum % 10
+            }
+
+            validate(lineOne, lineTwo) {
+                let tleStatus = {
+                    lineOneStatus: this.validateLineOne(lineOne),
+                    lineTwoStatus: this.validateLineTwo(lineTwo)
+                };
+                if (tleStatus.lineOneStatus == null && tleStatus.lineTwoStatus == null && lineOne.slice(2, 7) != lineTwo.slice(2, 7)) {
+                    tleStatus.lineTwoStatus = '##### Catalog numbers must match';
+                }
+                return tleStatus;
+            }
+
+            validateLineOne(line) {
+                if (!this.lineOneRegexCatalogNumber.test(line.slice(2, 8))) {
+                    return '#####C_ Fix catalog number';
+                } else if (!this.lineOneRegexInternationalDesignator.test(line.slice(8, 17))) {
+                    return '      _#####AAA_ Fix international designator OR leave it blank';
+                } else if (!this.lineOneRegexEpoch.test(line.slice(17, 32))) {
+                    return '               _YYDDD.DDDDDDDD_ Fix epoch';
+                } else if (!this.lineOneRegexDMeanMotion.test(line.slice(32, 43))) {
+                    return '                              _+.########_ Fix first derivative of mean motion';
+                } else if (!this.lineOneRegexDDMeanMotion.test(line.slice(43, 52))) {
+                    return '   Fix second derivative of mean motion  _+#####-#_ ';
+                } else if (!this.lineOneRegexBSTAR.test(line.slice(52, 61))) {
+                    return '                                       Fix BSTAR  _+#####-#_ ';
+                } else if (!this.lineOneRegexEphemType.test(line.slice(61, 63))) {
+                    return '                            Ephemeris type should be zero  _0_ ';
+                } else if (!this.lineOneRegexSetNumber.test(line.slice(63, 68))) {
+                    return '                                     Fix element set number  _#### ';
+                } else if (line.length > 69) {
+                    return '                                     Extra character(s) detected  ─┘';
+                }
+
+                let checksum = this.computeChecksum(line);
+                if (checksum != line[68]) {
+                    return '                                              Checksum should be  ' + checksum;
+                } else {
+                    return null;
+                }
+            }
+
+            validateLineTwo(line) {
+                if (!this.lineTwoRegexCatalogNumber.test(line.slice(2, 7))) {
+                    return '#####_   Fix catalog number ';
+                } else if (!this.lineTwoRegexInclination.test(line.slice(7, 16))) {
+                    return '     _###.####_   Fix inclination';
+                } else if (!this.lineTwoRegexRAAN.test(line.slice(16, 25))) {
+                    return '              _###.####_   Fix right ascension ';
+                } else if (!this.lineTwoRegexEccentricity.test(line.slice(25, 33))) {
+                    return '     Fix eccentricity  _#######_ ';
+                } else if (!this.lineTwoRegexArgumentOfPerigee.test(line.slice(33, 42))) {
+                    return '      Fix argument of perigee  _###.####_ ';
+                } else if (!this.lineTwoRegexMeanAnomaly.test(line.slice(42, 51))) {
+                    return '                      Fix mean anomaly  _###.####_ ';
+                } else if (!this.lineTwoRegexMeanMotion.test(line.slice(51, 63))) {
+                    return '                                Fix mean motion  _##.######## ';
+                } else if (!this.lineTwoRegexRevNumber.test(line.slice(63, 68))) {
+                    return '                                      Fix revolution number  ##### ';
+                } else if (line.length > 69) {
+                    return '                                     Extra character(s) detected  ─┘';
+                }
+
+                let checksum = this.computeChecksum(line);
+                if (checksum != line[68]) {
+                    return '                                              Checksum should be  ' + checksum;
+                } else {
+                    return null;
+                }
+            }
+
+        }
+
+        class MultiLineTLEValidator {
+            constructor() {
+                this.buffer = null;
+                this.recentLine = null;
+                this.tleValidator = new TLEValidator();
+            }
+
+            output() {
+                if (this.recentLine != null) {
+                    this.writeToBuffer(this.recentLine);
+                    if (this.recentLine.startsWith('1 ')) {
+                        this.writeToBuffer('🚩Found line one, missing line two');
+                    }
+                    else if (this.recentLine.startsWith('2 ')) {
+                        this.writeToBuffer('🚩Found line two, missing line one');
+                    }
+                }
+
+                return this.buffer;
+            }
+
+            sanitizeLine(line) {
+                if (line.startsWith('✅') || line.startsWith('🚩')) {
+                    return null;
+                }
+                else if (line.includes('✅')) {
+                    return line.slice(0, line.indexOf('✅'));
+                }
+                else if (line.includes('🚩')) {
+                    return line.slice(0, line.indexOf('🚩'));
+                } else {
+                    return line;
+                }
+            }
+
+            validateLine(line = '') {
+                line = this.sanitizeLine(line);
+
+                if (line == null) {
+                    return null;
+                }
+                else if (this.recentLine == null) {
+                    this.recentLine = line;
+                }
+                else if (this.recentLine.startsWith('1 ')) {
+                    if (line.startsWith('2 ')) {
+                        const tleStatus = this.tleValidator.validate(this.recentLine, line);
+
+
+                        if (tleStatus.lineOneStatus == null && tleStatus.lineTwoStatus == null) {
+                            this.writeToBuffer(this.recentLine);
+                            this.writeToBuffer(line);
+                            this.writeToBuffer('✅ Looks good to me 🍅');
+                        }
+                        else {
+                            this.writeToBuffer(this.recentLine);
+                            if (tleStatus.lineOneStatus != null) {
+                                this.writeToBuffer('🚩' + tleStatus.lineOneStatus);
+                            }
+
+                            this.writeToBuffer(line);
+                            if (tleStatus.lineTwoStatus != null) {
+                                this.writeToBuffer('🚩' + tleStatus.lineTwoStatus);
+                            }
+
+                        }
+
+                        this.recentLine = null;
+                    }
+
+                    else {
+                        this.writeToBuffer(this.recentLine);
+                        this.writeToBuffer('🚩 Found line one, missing line two');
+                        this.recentLine = line;
+                    }
+                }
+                else if (this.recentLine.startsWith('2 ')) {
+                    this.writeToBuffer(this.recentLine);
+                    this.writeToBuffer('🚩Found line two, missing line one');
+                    this.recentLine = line;
+                }
+                else {
+                    this.writeToBuffer(this.recentLine);
+                    this.recentLine = line;
+                }
+            }
+
+            validateLines(lines) {
+                for (const line of lines) {
+                    this.validateLine(line);
+                }
+            }
+
+            writeToBuffer(line) {
+                if (this.buffer == null) {
+                    this.buffer = line;
+                }
+                else {
+                    this.buffer += '\n' + line;
+                }
+            }
+
+        }
+
+        function display() {
+            const userinput = document.getElementById('userinput')
+
+            // get cursor position before generating message
+            const cursor = userinput.selectionStart;
+
+            const userlines = userinput.value.replace(/\r/g, '').split(/\n/);
+            const multiLineTLEValidator = new MultiLineTLEValidator();
+            multiLineTLEValidator.validateLines(userlines);
+            document.getElementById('userinput').value = multiLineTLEValidator.output();
+
+            // restore cursor position (assumes all message updates are after cursor)
+            userinput.setSelectionRange(cursor, cursor);
+        }
+
+        display();
+
+    </script>
+</body>
+
+</html>
